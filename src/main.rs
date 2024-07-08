@@ -1,11 +1,48 @@
 use reqwest::blocking::Client;
-use std::{fs, io::Write};
+use reqwest::Error as ReqwestError;
+use std::{fs, io::Error as IOError, io::Write};
 
 const WORKING_FILES_LOCATION: &str = "./_rss_feed/";
+
+enum DownloadError {
+    RequestError(ReqwestError),
+    FileError(IOError),
+}
 
 struct Site<'a> {
     slug: &'a str,
     rss_link: &'a str,
+}
+impl Site<'_> {
+    fn download_to_working_dir(&self, client: &Client) -> Result<(), DownloadError> {
+        let bytes = client
+            .get(self.rss_link)
+            .send()
+            .map(|response| response.bytes());
+        let bytes = match bytes {
+            Ok(Ok(response)) => response,
+            Err(err) => {
+                return Err(DownloadError::RequestError(err));
+            }
+            Ok(Err(err)) => {
+                return Err(DownloadError::RequestError(err));
+            }
+        };
+
+        let output_file_name = format!("{}{}.xml", WORKING_FILES_LOCATION, self.slug);
+
+        let file = fs::File::create(&output_file_name);
+        let result = file.map(|mut file| {
+            file.write_all(&bytes)?;
+            file.flush()?;
+            Ok::<(), IOError>(())
+        });
+        match result {
+            Ok(Ok(_)) => Ok(()),
+            Err(err) => Err(DownloadError::FileError(err)),
+            Ok(Err(err)) => Err(DownloadError::FileError(err)),
+        }
+    }
 }
 
 static SITE_LIST: [Site; 3] = [
@@ -24,25 +61,25 @@ static SITE_LIST: [Site; 3] = [
 ];
 
 fn main() {
-    // initialize working environment if it doesn't exist yet.
-    fs::create_dir_all(WORKING_FILES_LOCATION).expect("Failed creating working directory");
+    initialize();
 
-    // TODO: Read files and write them locally.
     let client = Client::new();
     for site in SITE_LIST.as_ref() {
-        let res = client
-            .get(site.rss_link)
-            .send()
-            .expect(format!("Failed to fetch rss for site: {}", site.slug).as_ref());
-        let bytes = res
-            .bytes()
-            .expect("Failed converting response to its bytes");
-        let output_file_name = format!("{}{}.xml", WORKING_FILES_LOCATION, site.slug);
-
-        let mut file = fs::File::create(&output_file_name)
-            .expect(format!("Failed to create file: {}", output_file_name).as_ref());
-        file.write_all(&bytes)
-            .expect("Failed to write bytes to file");
-        file.flush().expect("Failed to flush file");
+        let res = site.download_to_working_dir(&client);
+        if let Err(err) = res {
+            match err {
+                DownloadError::RequestError(err) => eprintln!("{err}"),
+                DownloadError::FileError(err) => eprintln!("{err}"),
+            }
+        }
+        println!("Fetched rss file for {}", site.slug);
     }
+}
+
+/// initialize the working directory
+///
+/// # Panics
+/// - Panics if the directory creation fails
+fn initialize() {
+    fs::create_dir_all(WORKING_FILES_LOCATION).expect("Failed creating working directory");
 }
