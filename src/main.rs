@@ -1,11 +1,15 @@
 use reqwest::blocking::Client;
 use reqwest::Error as ReqwestError;
+use rss_feed::parse::{self, FeedItem};
 use std::{
     fs::{self, File},
     io::Write,
+    sync::{Arc, Mutex},
+    thread,
 };
 
-use rss_feed::parse;
+// TODO: Faster updates (parrallelize them)
+// TODO: Figure out how to schedule for me
 
 const OUTPUT_HTML_DIR: &str = "./html/";
 
@@ -58,22 +62,35 @@ static SITE_LIST: [Site; 3] = [
 fn main() {
     initialize();
 
-    let client = Client::new();
-
-    let mut total_list = Vec::new();
+    let total_list = Arc::new(Mutex::new(Vec::new()));
+    let mut handles = Vec::new();
     for site in SITE_LIST.as_ref() {
-        let text = site.get_rss_text(&client);
-        if let Err(err) = &text {
-            match err {
-                DownloadError::RequestError(err) => eprintln!("{err}"),
+        let thread_total_list = Arc::clone(&total_list);
+        let handle = thread::spawn(move || {
+            let client = Client::new();
+            let text = site.get_rss_text(&client);
+            if let Err(err) = &text {
+                match err {
+                    DownloadError::RequestError(err) => eprintln!("{err}"),
+                }
             }
-        }
-        let text = text.expect("Should be impossible");
-        println!("Fetched rss file for {}, size: {}", site.slug, text.len());
-        let mut list = parse::parse_rss(text, site.author);
-        total_list.append(&mut list);
+            let text = text.expect("Should be impossible");
+            println!("Fetched rss file for {}, size: {}", site.slug, text.len());
+            let mut list = parse::parse_rss(text, site.author);
+            let mut full_list = thread_total_list
+                .lock()
+                .expect("Failed unlocking total list");
+            full_list.append(&mut list);
+        });
+        handles.push(handle);
     }
-    total_list.sort_by_key(|item| item.date);
+    for handle in handles {
+        handle.join().expect("Thread failed");
+    }
+    let mut total_list = total_list
+        .lock()
+        .expect("Failed getting lock on total list after all threads complete.");
+    total_list.sort_by_key(|item: &FeedItem| item.date);
     total_list.reverse();
     output_list_to_html(&total_list);
 }
