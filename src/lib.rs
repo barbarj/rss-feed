@@ -9,16 +9,6 @@ pub mod parse {
         pub date: NaiveDateTime,
         pub author: &'a str,
     }
-    impl<'a> FeedItem<'a> {
-        fn default(author: &'a str) -> Self {
-            FeedItem {
-                link: String::new(),
-                title: String::new(),
-                date: NaiveDateTime::UNIX_EPOCH,
-                author: author,
-            }
-        }
-    }
     impl Display for FeedItem<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_fmt(format_args!(

@@ -4,7 +4,7 @@ use rss_feed::parse::{self, FeedItem};
 use std::{
     fs::{self, File},
     io::Write,
-    sync::{Arc, Mutex},
+    sync::{mpsc::channel, Arc, Mutex},
     thread,
 };
 
@@ -62,10 +62,10 @@ static SITE_LIST: [Site; 3] = [
 fn main() {
     initialize();
 
-    let total_list = Arc::new(Mutex::new(Vec::new()));
+    let (tx, rx) = channel();
     let mut handles = Vec::new();
     for site in SITE_LIST.as_ref() {
-        let thread_total_list = Arc::clone(&total_list);
+        let thread_tx = tx.clone();
         let handle = thread::spawn(move || {
             let client = Client::new();
             let text = site.get_rss_text(&client);
@@ -78,24 +78,28 @@ fn main() {
             println!("Fetched rss file for {}, size: {}", site.slug, text.len());
 
             let parser = parse::Parser::new(&text, site.author);
-            let mut list: Vec<FeedItem> = parser.into_iter().collect();
-
-            let mut full_list = thread_total_list
-                .lock()
-                .expect("Failed unlocking total list");
-            full_list.append(&mut list);
+            for item in parser.into_iter() {
+                thread_tx.send(item).unwrap();
+            }
         });
         handles.push(handle);
     }
+    drop(tx);
+
+    let output_handle = thread::spawn(move || {
+        let mut total_list = Vec::new();
+        while let Ok(item) = rx.recv() {
+            total_list.push(item);
+        }
+        total_list.sort_by_key(|item: &FeedItem| item.date);
+        total_list.reverse();
+        output_list_to_html(&total_list);
+    });
+
     for handle in handles {
         handle.join().expect("Thread failed");
     }
-    let mut total_list = total_list
-        .lock()
-        .expect("Failed getting lock on total list after all threads complete.");
-    total_list.sort_by_key(|item: &FeedItem| item.date);
-    total_list.reverse();
-    output_list_to_html(&total_list);
+    output_handle.join().unwrap();
 }
 
 /// initialize the working directory
