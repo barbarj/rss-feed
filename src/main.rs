@@ -5,15 +5,14 @@ use reqwest::Error as ReqwestError;
 use std::{
     fmt::Display,
     fs::{self, File},
-    io::{Error as IOError, Write},
+    io::Write,
 };
 
-const WORKING_FILES_LOCATION: &str = "./_rss_feed/";
 const OUTPUT_HTML_DIR: &str = "./html/";
 
+#[derive(Debug)]
 enum DownloadError {
     RequestError(ReqwestError),
-    FileError(IOError),
 }
 
 struct Site<'a> {
@@ -22,35 +21,19 @@ struct Site<'a> {
     author: &'a str,
 }
 impl Site<'_> {
-    fn output_file_name(&self) -> String {
-        format!("{}{}.xml", WORKING_FILES_LOCATION, self.slug)
-    }
-
-    fn download_to_working_dir(&self, client: &Client) -> Result<(), DownloadError> {
-        let bytes = client
+    fn get_rss_text(&self, client: &Client) -> Result<String, DownloadError> {
+        let text = client
             .get(self.rss_link)
             .send()
-            .map(|response| response.bytes());
-        let bytes = match bytes {
-            Ok(Ok(response)) => response,
+            .map(|response| response.text());
+        match text {
+            Ok(Ok(t)) => Ok(t),
             Err(err) => {
                 return Err(DownloadError::RequestError(err));
             }
             Ok(Err(err)) => {
                 return Err(DownloadError::RequestError(err));
             }
-        };
-
-        let file = fs::File::create(self.output_file_name());
-        let result = file.map(|mut file| {
-            file.write_all(&bytes)?;
-            file.flush()?;
-            Ok::<(), IOError>(())
-        });
-        match result {
-            Ok(Ok(_)) => Ok(()),
-            Err(err) => Err(DownloadError::FileError(err)),
-            Ok(Err(err)) => Err(DownloadError::FileError(err)),
         }
     }
 }
@@ -80,15 +63,15 @@ fn main() {
 
     let mut total_list = Vec::new();
     for site in SITE_LIST.as_ref() {
-        let res = site.download_to_working_dir(&client);
-        if let Err(err) = res {
+        let text = site.get_rss_text(&client);
+        if let Err(err) = &text {
             match err {
                 DownloadError::RequestError(err) => eprintln!("{err}"),
-                DownloadError::FileError(err) => eprintln!("{err}"),
             }
         }
+        let text = text.expect("Should be impossible");
         println!("Fetched rss file for {}", site.slug);
-        let mut list = parse_file(&site.output_file_name(), site.author);
+        let mut list = parse_rss(text, site.author);
         total_list.append(&mut list);
     }
     total_list.sort_by_key(|item| item.date);
@@ -101,7 +84,6 @@ fn main() {
 /// # Panics
 /// - Panics if the directory creation fails
 fn initialize() {
-    fs::create_dir_all(WORKING_FILES_LOCATION).expect("Failed creating working directory");
     fs::create_dir_all(OUTPUT_HTML_DIR).expect("Failed creating html directory");
 }
 
@@ -139,8 +121,8 @@ enum CurrentTag {
 
 // TODO: Improve this state machine. I don't like the mutating of `item`. I'd rather collect parts then emit it at the end if possible
 // TODO: Handle errors more appropriately
-fn parse_file<'a>(path: &str, author: &'a str) -> Vec<FeedItem<'a>> {
-    let mut reader = Reader::from_file(path).expect("Failed to initialize reader.");
+fn parse_rss<'a>(text: String, author: &'a str) -> Vec<FeedItem<'a>> {
+    let mut reader = Reader::from_str(&text);
     let mut buffer = Vec::new();
 
     let mut item = FeedItem::default(&author);
