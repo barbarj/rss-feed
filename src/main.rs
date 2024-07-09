@@ -76,7 +76,10 @@ fn main() {
             }
             let text = text.expect("Should be impossible");
             println!("Fetched rss file for {}, size: {}", site.slug, text.len());
-            let mut list = parse::parse_rss(text, site.author);
+
+            let parser = parse::Parser::new(&text, site.author);
+            let mut list: Vec<FeedItem> = parser.into_iter().collect();
+
             let mut full_list = thread_total_list
                 .lock()
                 .expect("Failed unlocking total list");

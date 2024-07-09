@@ -1,6 +1,6 @@
 pub mod parse {
     use chrono::NaiveDateTime;
-    use quick_xml::{events::Event, Reader};
+    use quick_xml::{events::Event, Error, Reader};
     use std::fmt::Display;
 
     pub struct FeedItem<'a> {
@@ -28,113 +28,199 @@ pub mod parse {
         }
     }
 
-    enum CurrentTag {
+    #[derive(Debug)]
+    enum Tag {
+        Item,
         Title,
         Link,
         PubDate,
         None,
     }
-    enum ParsingMessage {
-        ShouldContinue,
-        ShouldStop,
+
+    #[derive(PartialEq)]
+    enum ParseState {
+        OutOfItem,
+        InItem,
+        InItemTagOpened,
+        InItemTextConsumed,
     }
 
-    struct ParseState<'a> {
-        author: &'a str,
-        current_tag: CurrentTag,
-        output_items: Option<Vec<FeedItem<'a>>>,
-        current_item: Option<FeedItem<'a>>,
+    /// NOTE: This currently assumes (mostly) that the xml is
+    /// well-structured
+    pub struct Parser<'a, 'b> {
+        reader: Reader<&'a [u8]>,
+        author: &'b str,
+        state: ParseState,
+        done: bool,
     }
-    impl<'a> ParseState<'a> {
-        fn new(author: &'a str) -> Self {
-            ParseState {
+    impl<'a, 'b> Parser<'a, 'b> {
+        pub fn new(input: &'a str, author: &'b str) -> Self {
+            Parser {
+                reader: Reader::from_str(&input),
                 author: &author,
-                current_tag: CurrentTag::None,
-                output_items: Some(Vec::new()),
-                current_item: Some(FeedItem::default(author)),
+                state: ParseState::OutOfItem,
+                done: false,
             }
         }
 
-        // TODO: Improve this state machine. I don't like the mutating of `item`. I'd rather collect parts then emit it at the end if possible
-        // TODO: Handle errors more appropriately
-        fn handle_event(&mut self, event: Event) -> ParsingMessage {
-            match event {
-                Event::Start(tag) => match tag.name().as_ref() {
-                    b"item" => self.current_tag = CurrentTag::None,
-                    b"title" => self.current_tag = CurrentTag::Title,
-                    b"link" => self.current_tag = CurrentTag::Link,
-                    b"pubDate" => self.current_tag = CurrentTag::PubDate,
-                    _ => self.current_tag = CurrentTag::None,
-                },
-                Event::Text(text) => {
-                    let item = self
-                        .current_item
-                        .as_mut()
-                        .expect("This feed item should be present here");
-                    match self.current_tag {
-                        // TODO: Possiby use COWs in FeedItem instead of forcing copy here
-                        CurrentTag::Link => item.link = text.unescape().unwrap().into_owned(),
-                        CurrentTag::Title => item.title = text.unescape().unwrap().into_owned(),
-                        CurrentTag::PubDate => {
-                            item.date = NaiveDateTime::parse_from_str(
-                                text.unescape().unwrap().into_owned().as_ref(),
-                                "%a, %d %b %Y %H:%M:%S%::z",
-                            )
-                            .expect("Date parsing failed");
-                        }
-                        CurrentTag::None => (),
+        // TODO: Get some asserts on self.state to force correct usage
+
+        /// Find the next opening tag type, of the types we recognize
+        /// in `Tag`
+        fn find_open_tag(&mut self) -> Result<Option<Tag>, Error> {
+            // assert!(matches!(self.state, ParseState::InItem));
+            let mut tag = Tag::None;
+            while matches!(tag, Tag::None) {
+                let event = match self.reader.read_event() {
+                    Ok(event) => event,
+                    Err(err) => {
+                        return Err(err);
                     }
-                }
-                Event::End(tag) => match tag.name().as_ref() {
-                    b"item" => {
-                        let item = self
-                            .current_item
-                            .take()
-                            .expect("There should be an item here.");
-                        let list = self
-                            .output_items
-                            .as_mut()
-                            .expect("There should be a list here.");
-                        list.push(item);
-                        self.current_item = Some(FeedItem::default(self.author));
+                };
+                tag = match event {
+                    Event::Start(t) => match t.name().as_ref() {
+                        b"item" => Tag::Item,
+                        b"title" => Tag::Title,
+                        b"link" => Tag::Link,
+                        b"pubDate" => Tag::PubDate,
+                        _ => Tag::None,
+                    },
+                    Event::Eof => {
+                        self.done = true;
+                        return Ok(None);
                     }
-                    b"title" | b"link" | b"pubDate" => self.current_tag = CurrentTag::None,
+                    _ => Tag::None,
+                };
+            }
+            // self.state = ParseState::InItemTagOpened;
+            Ok(Some(tag))
+        }
+
+        /// Find the next piece of text to consume
+        fn find_text(&mut self) -> Result<Option<String>, Error> {
+            // assert!(matches!(self.state, ParseState::InItemTagOpened));
+            loop {
+                let event = match self.reader.read_event() {
+                    Ok(event) => event,
+                    Err(err) => {
+                        return Err(err);
+                    }
+                };
+                match event {
+                    Event::Text(text) => {
+                        // self.state = ParseState::InItemTextConsumed;
+                        return text.unescape().map(|t| String::from(t)).map(|t| Some(t));
+                    }
+                    Event::Eof => {
+                        self.done = true;
+                        return Ok(None);
+                    }
                     _ => (),
-                },
-                Event::Eof => {
-                    return ParsingMessage::ShouldStop;
                 }
-                _ => (),
             }
-            ParsingMessage::ShouldContinue
         }
 
-        fn take_list(&mut self) -> Vec<FeedItem<'a>> {
-            let list = self
-                .output_items
-                .take()
-                .expect("There should be a list when we take it.");
-            self.output_items = Some(Vec::new()); // TODO: Not sure if need this. Can I somehow mark this object as "dead"?
-            list
+        /// Consumes through the next closing tag of of type `tag`
+        fn consume_close_tag(&mut self, tag: &Tag) -> Result<(), Error> {
+            loop {
+                let event = match self.reader.read_event() {
+                    Ok(event) => event,
+                    Err(err) => {
+                        return Err(err);
+                    }
+                };
+                match event {
+                    Event::End(t) => match (t.name().as_ref(), tag) {
+                        (b"item", Tag::Item) => return Ok(()),
+                        (b"title", Tag::Title) => return Ok(()),
+                        (b"link", Tag::Link) => return Ok(()),
+                        (b"pubDate", Tag::PubDate) => return Ok(()),
+                        _ => (),
+                    },
+                    Event::Eof => {
+                        self.done = true;
+                        return Ok(());
+                    }
+                    _ => (),
+                };
+            }
+        }
+
+        /// Returns the next tag type and its contents. Assumes you are _in_ an `<item>`
+        fn consume_next_tag(&mut self) -> Result<Option<(Tag, String)>, Error> {
+            let tag = self.find_open_tag()?;
+            let tag = match tag {
+                Some(tag) => tag,
+                None => return Ok(None),
+            };
+
+            let text = self.find_text()?;
+            let text = match text {
+                Some(text) => text,
+                None => return Ok(None),
+            };
+
+            self.consume_close_tag(&tag)?;
+
+            Ok(Some((tag, text)))
+        }
+
+        fn next_item(&mut self) -> Result<Option<FeedItem<'b>>, Error> {
+            if self.done {
+                return Ok(None);
+            }
+
+            // find item opening tag
+            loop {
+                let tag = match self.find_open_tag()? {
+                    Some(t) => t,
+                    None => return Ok(None),
+                };
+                if matches!(tag, Tag::Item) {
+                    break;
+                }
+            }
+
+            let mut link: Option<String> = None;
+            let mut title: Option<String> = None;
+            let mut date: Option<NaiveDateTime> = None;
+            while link.is_none() || title.is_none() || date.is_none() {
+                let (tag, text) = match self.consume_next_tag()? {
+                    Some((tag, text)) => (tag, text),
+                    None => return Ok(None),
+                };
+                match tag {
+                    Tag::Item => panic!("Shouldn't happen"), //TODO: remove panic via wrapped error
+                    Tag::Link => link = Some(text),
+                    Tag::Title => title = Some(text),
+                    Tag::PubDate => {
+                        date = NaiveDateTime::parse_from_str(&text, "%a, %d %b %Y %H:%M:%S%::z")
+                            .map(|x| Some(x))
+                            .expect("Date parsing failed")
+                    }
+                    Tag::None => panic!("Shouldn't happen"), //TODO: remove panic via wrapped error
+                }
+            }
+
+            let link = link.take().expect("There should be an link here");
+            let title = title.take().expect("There should be an title here");
+            let date = date.take().expect("There should be an date here");
+
+            Ok(Some(FeedItem {
+                link,
+                title,
+                date,
+                author: &self.author,
+            }))
         }
     }
 
-    pub fn parse_rss<'a>(text: String, author: &'a str) -> Vec<FeedItem<'a>> {
-        let mut reader = Reader::from_str(&text);
-        let mut buffer = Vec::new();
+    impl<'a, 'b> Iterator for Parser<'a, 'b> {
+        type Item = FeedItem<'b>;
 
-        let mut parse_state = ParseState::new(&author);
-        loop {
-            match reader.read_event_into(&mut buffer) {
-                Err(e) => eprintln!("ERROR: {e}"),
-                Ok(event) => match parse_state.handle_event(event) {
-                    ParsingMessage::ShouldContinue => (),
-                    ParsingMessage::ShouldStop => {
-                        break;
-                    }
-                },
-            }
+        fn next(&mut self) -> Option<Self::Item> {
+            // TODO: Figure out how to handle Result better
+            self.next_item().expect("Failed to get next item")
         }
-        parse_state.take_list()
     }
 }
