@@ -189,7 +189,7 @@ fn output_list_to_html(list: &Vec<FeedItem>) {
     let filepath = format!("{}feed.html", OUTPUT_HTML_DIR);
     let mut file = File::create(filepath).expect("Failed to create html file.");
     file.write_all(
-        "<html lang=\"en\"><head><link rel=\"stylesheet\" href=\"styles.css\"></head><body>"
+        "<html lang=\"en\"><head><link rel=\"stylesheet\" href=\"style.css\"></head><body>"
             .as_bytes(),
     )
     .unwrap();
@@ -200,6 +200,7 @@ fn output_list_to_html(list: &Vec<FeedItem>) {
                 <span class=\"date\">{}</span> \
                 <a href=\"{}\">{}</a> \
                 - <span class=\"author\">{}</span> \
+            </div> \
         ",
             item.date.date(),
             item.link,
