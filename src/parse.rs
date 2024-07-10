@@ -1,21 +1,7 @@
 use chrono::NaiveDateTime;
 use quick_xml::{events::Event, Error, Reader};
-use std::fmt::Display;
 
-pub struct FeedItem<'a> {
-    pub link: String,
-    pub title: String,
-    pub date: NaiveDateTime,
-    pub author: &'a str,
-}
-impl Display for FeedItem<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "{} \"{}\" ({}) - {}",
-            self.date, self.title, self.author, self.link
-        ))
-    }
-}
+use crate::FeedItem;
 
 #[derive(Debug)]
 enum Tag {
@@ -200,7 +186,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// 1. Find's next opening item tag: `<item>`
     /// 2. Extracts text from the relevant tags within that item
     /// 3. Returns the completed `FeedItem`
-    fn next_item(&mut self) -> Result<Option<FeedItem<'b>>, Error> {
+    fn next_item(&mut self) -> Result<Option<FeedItem>, Error> {
         if self.done {
             return Ok(None);
         }
@@ -232,7 +218,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Tag::Link => link = Some(text),
                 Tag::Title => title = Some(text),
                 Tag::PubDate => {
-                    date = NaiveDateTime::parse_from_str(&text, "%a, %d %b %Y %H:%M:%S%::z")
+                    date = FeedItem::parse_date(&text)
                         .map(|x| Some(x))
                         .expect("Date parsing failed")
                 }
@@ -252,13 +238,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             link,
             title,
             date,
-            author: &self.author,
+            author: self.author.to_owned(),
         }))
     }
 }
 
 impl<'a, 'b> Iterator for Parser<'a, 'b> {
-    type Item = FeedItem<'b>;
+    type Item = FeedItem;
 
     fn next(&mut self) -> Option<Self::Item> {
         // TODO: Figure out how to handle Result better
