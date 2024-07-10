@@ -13,15 +13,7 @@ pub struct Site<'a> {
 }
 impl Site<'_> {
     pub fn get_rss_text(&self, client: &Client) -> Result<String, ReqwestError> {
-        let text = client
-            .get(self.rss_link)
-            .send()
-            .map(|response| response.text());
-        match text {
-            Ok(Ok(t)) => Ok(t),
-            Err(err) => Err(err),
-            Ok(Err(err)) => Err(err),
-        }
+        client.get(self.rss_link).send()?.text()
     }
 }
 
