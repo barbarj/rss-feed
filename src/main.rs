@@ -1,5 +1,5 @@
+use rss_feed::parse;
 use rss_feed::{output_css, output_list_to_html, storage, Site};
-use rss_feed::{parse, Post};
 use rusqlite::Connection;
 use std::{fs, sync::mpsc::channel, thread};
 
@@ -49,10 +49,9 @@ fn main() {
     }
     drop(tx); // main thread doesn't need a sender
 
-    let total_list: Vec<Post> = rx.iter().flatten().collect();
-
     let mut txn = sqlit_conn.transaction().unwrap();
-    let new_rows = storage::upsert_posts(&mut txn, &total_list).expect("Upserting posts failed");
+    let new_rows =
+        storage::upsert_posts(&mut txn, rx.iter().flatten()).expect("Upserting posts failed");
     let all_posts = storage::fetch_all_posts(&txn).expect("Fetching posts from db failed");
     txn.commit().unwrap();
 

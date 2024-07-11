@@ -124,9 +124,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Tag::Link => link = Some(text),
                 Tag::Title => title = Some(text),
                 Tag::PubDate => {
-                    date = NaiveDateTime::parse_from_str(&text, "%a, %d %b %Y %H:%M:%S%::z")
-                        .map(|x| Some(x))
-                        .expect("Date parsing failed")
+                    let d = NaiveDateTime::parse_from_str(&text, "%a, %d %b %Y %H:%M:%S%::z")
+                        .expect("Date parsing failed");
+                    date = Some(d);
                 }
                 Tag::None => (),
             }

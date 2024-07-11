@@ -88,7 +88,10 @@ pub mod storage {
         Ok(())
     }
 
-    pub fn upsert_posts(tx: &mut Transaction, posts: &[Post]) -> Result<usize, rusqlite::Error> {
+    pub fn upsert_posts(
+        tx: &mut Transaction,
+        posts: impl Iterator<Item = Post>,
+    ) -> Result<usize, rusqlite::Error> {
         let mut stmt = tx.prepare(
             "INSERT INTO posts(link, title, date, author) \
                             VALUES(:link, :title, :date, :author) \
