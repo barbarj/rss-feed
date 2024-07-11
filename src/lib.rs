@@ -71,7 +71,7 @@ pub fn output_css(css_path: &str, app_dir: &str) {
 }
 
 pub mod storage {
-    use rusqlite::Connection;
+    use rusqlite::{Connection, Transaction};
 
     use crate::FeedItem;
 
@@ -90,11 +90,9 @@ pub mod storage {
     }
 
     pub fn upsert_posts(
-        conn: &mut Connection,
+        tx: &mut Transaction,
         posts: &[FeedItem],
     ) -> Result<usize, rusqlite::Error> {
-        let tx = conn.transaction()?;
-
         let mut stmt = tx.prepare(
             "INSERT INTO posts(link, title, date, author) \
                             VALUES(:link, :title, :date, :author) \
@@ -111,8 +109,6 @@ pub mod storage {
                 (":author", &post.author),
             ])?;
         }
-        drop(stmt);
-        tx.commit()?;
         Ok(rows_affected)
     }
 

@@ -5,8 +5,6 @@ use rusqlite::Connection;
 use std::{fs, sync::mpsc::channel, thread};
 
 // TODO: Figure out how to schedule for me
-// TODO: Make iterative, so I can keep a history of all posts, since the feed contents
-//       may change over time.
 
 const APP_DIR: &'static str = "./app/";
 const DB_PATH: &'static str = constcat::concat!(APP_DIR, "db.sqlite");
@@ -55,10 +53,12 @@ fn main() {
     drop(tx); // main thread doesn't need a sender
 
     let total_list: Vec<FeedItem> = rx.iter().collect();
-    let new_rows =
-        storage::upsert_posts(&mut sqlit_conn, &total_list).expect("Upserting posts failed");
 
-    let all_posts = storage::fetch_all_posts(&sqlit_conn).expect("Fetching posts from db failed");
+    let mut txn = sqlit_conn.transaction().unwrap();
+    let new_rows = storage::upsert_posts(&mut txn, &total_list).expect("Upserting posts failed");
+    let all_posts = storage::fetch_all_posts(&txn).expect("Fetching posts from db failed");
+    txn.commit().unwrap();
+
     output_list_to_html(&all_posts, &OUTPUT_HTML_PATH);
     output_css(CSS_LOC, APP_DIR);
     println!("Added {new_rows} posts from feeds.");
