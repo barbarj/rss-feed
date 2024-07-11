@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Write;
 
 use chrono::NaiveDateTime;
@@ -26,8 +26,8 @@ pub struct FeedItem {
     pub author: String,
 }
 impl FeedItem {
-    pub fn parse_date(text: &str) -> Result<NaiveDateTime, chrono::ParseError> {
-        NaiveDateTime::parse_from_str(text, "%a, %d %b %Y %H:%M:%S%::z")
+    pub fn parse_stored_date(text: &str) -> Result<NaiveDateTime, chrono::ParseError> {
+        NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
     }
 }
 impl Display for FeedItem {
@@ -66,9 +66,12 @@ pub fn output_list_to_html(list: &Vec<FeedItem>, filepath: &str) {
     file.flush().unwrap();
 }
 
+pub fn output_css(css_path: &str, app_dir: &str) {
+    fs::copy(css_path, app_dir.to_string() + "style.css").expect("Copying CSS file failed.");
+}
+
 pub mod storage {
-    use chrono::NaiveDateTime;
-    use rusqlite::{Connection, Row};
+    use rusqlite::Connection;
 
     use crate::FeedItem;
 
@@ -86,7 +89,10 @@ pub mod storage {
         Ok(())
     }
 
-    pub fn upsert_posts(conn: &mut Connection, posts: &[FeedItem]) -> Result<(), rusqlite::Error> {
+    pub fn upsert_posts(
+        conn: &mut Connection,
+        posts: &[FeedItem],
+    ) -> Result<usize, rusqlite::Error> {
         let tx = conn.transaction()?;
 
         let mut stmt = tx.prepare(
@@ -95,8 +101,10 @@ pub mod storage {
                             ON CONFLICT(link) DO NOTHING;",
         )?;
 
+        let mut rows_affected = 0;
+
         for post in posts {
-            stmt.execute(&[
+            rows_affected += stmt.execute(&[
                 (":link", &post.link),
                 (":title", &post.title),
                 (":date", &post.date.to_string()),
@@ -104,17 +112,19 @@ pub mod storage {
             ])?;
         }
         drop(stmt);
-        tx.commit()
+        tx.commit()?;
+        Ok(rows_affected)
     }
 
-    pub fn fetch_all_posts(conn: Connection) -> Result<Vec<FeedItem>, rusqlite::Error> {
-        let mut stmt = conn.prepare("SELECT link, title, date, author FROM posts;")?;
+    pub fn fetch_all_posts(conn: &Connection) -> Result<Vec<FeedItem>, rusqlite::Error> {
+        let mut stmt =
+            conn.prepare("SELECT link, title, date, author FROM posts ORDER BY date DESC;")?;
 
         let posts = stmt
             .query([])?
             .mapped(|row| {
                 let d: String = row.get(2)?;
-                let date = FeedItem::parse_date(&d).expect("Parsing stored date failed");
+                let date = FeedItem::parse_stored_date(&d).expect("Parsing stored date failed");
                 let item = FeedItem {
                     link: row.get(0)?,
                     title: row.get(1)?,

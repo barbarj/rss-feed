@@ -218,7 +218,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Tag::Link => link = Some(text),
                 Tag::Title => title = Some(text),
                 Tag::PubDate => {
-                    date = FeedItem::parse_date(&text)
+                    date = NaiveDateTime::parse_from_str(&text, "%a, %d %b %Y %H:%M:%S%::z")
                         .map(|x| Some(x))
                         .expect("Date parsing failed")
                 }

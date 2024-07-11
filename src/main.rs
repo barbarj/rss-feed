@@ -1,5 +1,5 @@
 use reqwest::blocking::Client;
-use rss_feed::{output_list_to_html, storage, Site};
+use rss_feed::{output_css, output_list_to_html, storage, Site};
 use rss_feed::{parse, FeedItem};
 use rusqlite::Connection;
 use std::{fs, sync::mpsc::channel, thread};
@@ -10,6 +10,8 @@ use std::{fs, sync::mpsc::channel, thread};
 
 const APP_DIR: &'static str = "./app/";
 const DB_PATH: &'static str = constcat::concat!(APP_DIR, "db.sqlite");
+const OUTPUT_HTML_PATH: &'static str = constcat::concat!(APP_DIR, "feed.html");
+const CSS_LOC: &'static str = "./assets/style.css";
 
 static SITE_LIST: [Site; 3] = [
     Site {
@@ -53,21 +55,14 @@ fn main() {
     drop(tx); // main thread doesn't need a sender
 
     let total_list: Vec<FeedItem> = rx.iter().collect();
-    storage::upsert_posts(&mut sqlit_conn, &total_list).expect("Upserting posts failed");
+    let new_rows =
+        storage::upsert_posts(&mut sqlit_conn, &total_list).expect("Upserting posts failed");
 
-    // let output_handle = thread::spawn(move || {
-    //     let total_list: Vec<FeedItem> = rx.iter().collect();
-
-    //     total_list.sort_by_key(|item: &FeedItem| item.date);
-    //     total_list.reverse();
-    //     let filepath = format!("{}feed.html", APP_DIR);
-    //     output_list_to_html(&total_list, &filepath);
-    // });
-
-    // for handle in handles {
-    //     handle.join().expect("Thread failed");
-    // }
-    // output_handle.join().unwrap();
+    let all_posts = storage::fetch_all_posts(&sqlit_conn).expect("Fetching posts from db failed");
+    output_list_to_html(&all_posts, &OUTPUT_HTML_PATH);
+    output_css(CSS_LOC, APP_DIR);
+    println!("Added {new_rows} posts from feeds.");
+    println!("Output {} posts to html.", all_posts.len());
 }
 
 /// initialize the working directory, database, and return a database connection
