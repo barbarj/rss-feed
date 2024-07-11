@@ -1,7 +1,7 @@
 use chrono::NaiveDateTime;
 use quick_xml::{events::Event, Error, Reader};
 
-use crate::FeedItem;
+use crate::Post;
 
 #[derive(Debug)]
 enum Tag {
@@ -186,7 +186,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// 1. Find's next opening item tag: `<item>`
     /// 2. Extracts text from the relevant tags within that item
     /// 3. Returns the completed `FeedItem`
-    fn next_item(&mut self) -> Result<Option<FeedItem>, Error> {
+    fn next_item(&mut self) -> Result<Option<Post>, Error> {
         if self.done {
             return Ok(None);
         }
@@ -204,7 +204,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         assert!(matches!(self.state, ParseState::InItemOutOfTag));
 
-        // get feed item parts
+        // get post parts
         let mut link: Option<String> = None;
         let mut title: Option<String> = None;
         let mut date: Option<NaiveDateTime> = None;
@@ -234,7 +234,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.consume_close_tag(&Tag::Item)?;
         assert!(matches!(self.state, ParseState::OutOfItem));
 
-        Ok(Some(FeedItem {
+        Ok(Some(Post {
             link,
             title,
             date,
@@ -244,10 +244,13 @@ impl<'a, 'b> Parser<'a, 'b> {
 }
 
 impl<'a, 'b> Iterator for Parser<'a, 'b> {
-    type Item = FeedItem;
+    type Item = Result<Post, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // TODO: Figure out how to handle Result better
-        self.next_item().expect("Failed to get next item")
+        match self.next_item() {
+            Ok(Some(post)) => Some(Ok(post)),
+            Ok(None) => None,
+            Err(e) => Some(Err(e)),
+        }
     }
 }

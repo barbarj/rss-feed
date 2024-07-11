@@ -1,6 +1,5 @@
-use reqwest::blocking::Client;
 use rss_feed::{output_css, output_list_to_html, storage, Site};
-use rss_feed::{parse, FeedItem};
+use rss_feed::{parse, Post};
 use rusqlite::Connection;
 use std::{fs, sync::mpsc::channel, thread};
 
@@ -33,14 +32,13 @@ fn main() {
     let mut sqlit_conn = initialize();
 
     let (tx, rx) = channel();
-    let mut handles = Vec::new();
     for site in SITE_LIST.as_ref() {
         let thread_tx = tx.clone();
 
-        // fetches feed items for this site
-        let handle = thread::spawn(move || {
-            let client = Client::new();
-            let text = site.get_rss_text(&client).unwrap();
+        // fetches posts for this site. Completion is guaranteed by blocking on the
+        // channel receiver later
+        thread::spawn(move || {
+            let text = site.get_rss_text().unwrap();
             println!("Fetched rss file for {}, size: {}", site.slug, text.len());
 
             let parser = parse::Parser::new(&text, site.author);
@@ -48,11 +46,10 @@ fn main() {
                 thread_tx.send(item).unwrap();
             }
         });
-        handles.push(handle);
     }
     drop(tx); // main thread doesn't need a sender
 
-    let total_list: Vec<FeedItem> = rx.iter().collect();
+    let total_list: Vec<Post> = rx.iter().flatten().collect();
 
     let mut txn = sqlit_conn.transaction().unwrap();
     let new_rows = storage::upsert_posts(&mut txn, &total_list).expect("Upserting posts failed");
