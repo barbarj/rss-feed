@@ -50,14 +50,14 @@ fn main() {
     drop(tx); // main thread doesn't need a sender
 
     let mut txn = sqlit_conn.transaction().unwrap();
-    let new_rows =
+    let new_row_count =
         storage::upsert_posts(&mut txn, rx.iter().flatten()).expect("Upserting posts failed");
-    let all_posts = storage::fetch_all_posts(&txn).expect("Fetching posts from db failed");
     txn.commit().unwrap();
+    let all_posts = storage::fetch_all_posts(&sqlit_conn).expect("Fetching posts from db failed");
 
     output_list_to_html(&all_posts, &OUTPUT_HTML_PATH);
     output_css(CSS_LOC, APP_DIR);
-    println!("Added {new_rows} posts from feeds.");
+    println!("Added {new_row_count} posts from feeds.");
     println!("Output {} posts to html.", all_posts.len());
 }
 
