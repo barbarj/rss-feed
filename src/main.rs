@@ -1,4 +1,5 @@
-use rss_feed::{output_css, output_list_to_html, storage, Site};
+use rss_feed::storage::Db;
+use rss_feed::{output_css, output_list_to_html, Site};
 use rss_feed::{parse, Options};
 use rusqlite::Connection;
 use std::env;
@@ -43,7 +44,7 @@ static SITE_LIST: [Site; 5] = [
 fn main() {
     let options = Options::new(env::args());
 
-    let mut sqlit_conn = initialize();
+    let mut db = initialize();
 
     let (tx, rx) = channel();
     for site in SITE_LIST.as_ref() {
@@ -64,11 +65,11 @@ fn main() {
     }
     drop(tx); // main thread doesn't need a sender
 
-    let mut txn = sqlit_conn.transaction().unwrap();
+    let mut txn = db.transaction().unwrap();
     let new_row_count =
-        storage::upsert_posts(&mut txn, rx.iter().flatten()).expect("Upserting posts failed");
+        Db::upsert_posts(&mut txn, rx.iter().flatten()).expect("Upserting posts failed");
     txn.commit().unwrap();
-    let all_posts = storage::fetch_all_posts(&sqlit_conn).expect("Fetching posts from db failed");
+    let all_posts = db.fetch_all_posts().expect("Fetching posts from db failed");
 
     output_list_to_html(&all_posts, &OUTPUT_HTML_PATH);
     output_css(CSS_LOC, APP_DIR);
@@ -88,12 +89,10 @@ fn main() {
 ///
 /// # Panics
 /// - Panics if the directory creation fails
-fn initialize() -> Connection {
+fn initialize() -> Db {
     fs::create_dir_all(APP_DIR).expect("Failed creating app directory");
 
     let conn = Connection::open(DB_PATH).expect("Failed to establish database connection");
 
-    storage::idempotently_create_posts_table(&conn).expect("Failed to create posts table.");
-
-    conn
+    Db::build(conn).unwrap()
 }

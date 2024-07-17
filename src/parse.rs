@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use quick_xml::{
     events::{BytesEnd, BytesStart, Event},
     Error, Reader,
@@ -113,7 +113,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         // get post parts
         let mut link: Option<String> = None;
         let mut title: Option<String> = None;
-        let mut date: Option<NaiveDateTime> = None;
+        let mut date: Option<DateTime<Utc>> = None;
         while link.is_none() || title.is_none() || date.is_none() {
             let (tag, text) = match self.consume_next_tag()? {
                 Some((tag, text)) => (tag, text),
@@ -124,9 +124,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Tag::Link => link = Some(text),
                 Tag::Title => title = Some(text),
                 Tag::PubDate => {
-                    let d = NaiveDateTime::parse_from_str(&text, "%a, %d %b %Y %H:%M:%S%::z")
+                    let d = DateTime::parse_from_rfc3339(&text)
+                        .or(DateTime::parse_from_rfc2822(&text))
                         .expect("Date parsing failed");
-                    date = Some(d);
+                    date = Some(d.with_timezone(&Utc));
                 }
                 Tag::None => (),
             }
