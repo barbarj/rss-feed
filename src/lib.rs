@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::Write;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use reqwest::Error as ReqwestError;
 
 pub mod parse;
@@ -43,9 +43,8 @@ pub struct Post {
 }
 impl Post {
     pub fn parse_stored_date(text: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
-        println!("dat: {text}");
-        let dt = NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")?;
-        Ok(DateTime::from_naive_utc_and_offset(dt, Utc))
+        let dt = DateTime::parse_from_rfc3339(&text)?;
+        Ok(dt.with_timezone(&Utc))
     }
 }
 impl Display for Post {

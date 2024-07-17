@@ -1,31 +1,23 @@
 use crate::Post;
 use rusqlite::Connection;
 
-const DB_VERSION: usize = 1;
-
 pub struct Db {
     conn: Connection,
 }
 impl Db {
     pub fn build(conn: Connection) -> Result<Self, rusqlite::Error> {
-        let db = Db { conn };
-        // TODO: migrate version
-        db.idempotently_create_posts_table()?;
-        Ok(db)
-    }
+        let mut db = Db { conn };
+        let version = db.get_version().expect("Getting db version failed");
+        match version {
+            0 => db.migrate_v0_v1().expect("Migrating version 0 to 1 failed"),
+            1 => (),
+            _ => panic!("Unknown db version found"),
+        }
+        let version = db.get_version().expect("Getting db version failed");
 
-    fn idempotently_create_posts_table(&self) -> Result<(), rusqlite::Error> {
-        let rows_changed = self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS posts( \
-                link TEXT PRIMARY KEY, \
-                title TEXT, \
-                date TEXT, \
-                author TEXT \
-            );",
-            [],
-        )?;
-        assert_eq!(rows_changed, 0);
-        Ok(())
+        assert_eq!(version, 1);
+
+        Ok(db)
     }
 
     pub fn upsert_posts(
@@ -45,7 +37,7 @@ impl Db {
             rows_affected += stmt.execute(&[
                 (":link", &post.link),
                 (":title", &post.title),
-                (":date", &post.date.to_string()),
+                (":date", &post.date.to_rfc3339()),
                 (":author", &post.author),
             ])?;
         }
@@ -75,6 +67,44 @@ impl Db {
             .flatten()
             .collect();
         Ok(posts)
+    }
+
+    // MIGRATIONS
+    fn get_version(&self) -> Result<usize, rusqlite::Error> {
+        self.conn
+            .execute("CREATE TABLE IF NOT EXISTS _metadata(version INTEGER);", [])?;
+
+        let version: Option<usize> = self
+            .conn
+            .prepare("SELECT version FROM _metadata ORDER BY version DESC LIMIT 1;")?
+            .query_map([], |row| {
+                let version: usize = row.get(0)?;
+                Ok(version)
+            })?
+            .flatten()
+            .next();
+
+        Ok(version.unwrap_or(0))
+    }
+
+    fn migrate_v0_v1(&mut self) -> Result<(), rusqlite::Error> {
+        let tx = self.conn.transaction()?;
+        // create table
+        let rows_changed = tx.execute(
+            "CREATE TABLE IF NOT EXISTS posts( \
+                link TEXT PRIMARY KEY, \
+                title TEXT, \
+                date TEXT, \
+                author TEXT \
+            );",
+            [],
+        )?;
+        assert_eq!(rows_changed, 0);
+
+        tx.execute("INSERT INTO _metadata(version) VALUES(1)", [])?;
+        tx.commit()?;
+
+        Ok(())
     }
 }
 
