@@ -14,6 +14,7 @@ pub struct Site<'a> {
 }
 impl Site<'_> {
     pub fn get_rss_text(&self) -> Result<String, ReqwestError> {
+        // TODO: Make retry on certain kinds of failures
         reqwest::blocking::get(self.rss_link)?.text()
     }
 }

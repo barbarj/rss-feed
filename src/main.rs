@@ -38,6 +38,7 @@ fn main() {
         // fetches posts for this site. Completion is guaranteed by blocking on the
         // channel receiver later
         thread::spawn(move || {
+            // TODO: Make fail gracefully if something goes wrong. Don't kill everything
             let text = site.get_rss_text().unwrap();
             println!("Fetched rss file for {}, size: {}", site.slug, text.len());
 
