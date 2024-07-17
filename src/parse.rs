@@ -36,6 +36,8 @@ impl Tag {
     }
 }
 
+// TODO: Add atom parser
+
 /// NOTE: This currently assumes (mostly) that the xml is
 /// well-structured
 pub struct Parser<'a, 'b> {
@@ -89,7 +91,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         let end = start.to_end();
         let tag = Tag::from_name(start.name().as_ref());
 
-        let text = self.reader.read_text(end.name())?.into_owned();
+        let text = self.reader.read_text(end.name())?;
+        let text = Parser::extract_text(&text);
         Ok(Some((tag, text)))
     }
 
@@ -145,6 +148,18 @@ impl<'a, 'b> Parser<'a, 'b> {
             date,
             author: self.author.to_owned(),
         }))
+    }
+
+    fn extract_text(text: &str) -> String {
+        const CDATA_START: &'static str = "<![CDATA[";
+        // remove cdata wrapper if necessary
+        if text.starts_with(CDATA_START) {
+            text.trim_start_matches(CDATA_START)
+                .trim_end_matches("]]>")
+                .to_string()
+        } else {
+            text.to_string()
+        }
     }
 }
 
