@@ -1,6 +1,8 @@
-use rss_feed::parse;
 use rss_feed::{output_css, output_list_to_html, storage, Site};
+use rss_feed::{parse, Options};
 use rusqlite::Connection;
+use std::env;
+use std::process::Command;
 use std::{fs, sync::mpsc::channel, thread};
 
 // TODO: Figure out how to schedule for me
@@ -26,9 +28,21 @@ static SITE_LIST: [Site; 3] = [
         rss_link: "https://buttondown.email/hillelwayne/rss",
         author: "Hillel Wayne",
     },
+    // Site {
+    //     slug: "thorstenball",
+    //     rss_link: "https://thorstenball.com/atom.xml",
+    //     author: "Thorsten Ball",
+    // },
+    // Site {
+    //     slug: "registerspill",
+    //     rss_link: "https://registerspill.thorstenball.com/feed",
+    //     author: "Thorsten Ball",
+    // },
 ];
 
 fn main() {
+    let options = Options::new(env::args());
+
     let mut sqlit_conn = initialize();
 
     let (tx, rx) = channel();
@@ -60,6 +74,14 @@ fn main() {
     output_css(CSS_LOC, APP_DIR);
     println!("Added {new_row_count} posts from feeds.");
     println!("Output {} posts to html.", all_posts.len());
+
+    if options.open_feed {
+        // TODO: May only work on MacOS
+        Command::new("open")
+            .arg(&OUTPUT_HTML_PATH)
+            .spawn()
+            .expect("Should have opened the html file in the browser");
+    }
 }
 
 /// initialize the working directory, database, and return a database connection

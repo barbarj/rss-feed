@@ -1,3 +1,4 @@
+use std::env::Args;
 use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::Write;
@@ -6,6 +7,20 @@ use chrono::NaiveDateTime;
 use reqwest::Error as ReqwestError;
 
 pub mod parse;
+
+pub struct Options {
+    pub open_feed: bool,
+}
+impl Options {
+    pub fn new(mut args: Args) -> Self {
+        // skip program name
+        args.next();
+
+        let open_feed = args.any(|a| a == "-o" || a == "--open");
+
+        Options { open_feed }
+    }
+}
 
 pub struct Site<'a> {
     pub slug: &'a str,
