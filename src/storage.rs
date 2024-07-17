@@ -1,5 +1,5 @@
 use crate::Post;
-use rusqlite::{Connection, Transaction};
+use rusqlite::Connection;
 
 const DB_VERSION: usize = 1;
 
@@ -28,14 +28,11 @@ impl Db {
         Ok(())
     }
 
-    pub fn transaction(&mut self) -> Result<Transaction, rusqlite::Error> {
-        self.conn.transaction()
-    }
-
     pub fn upsert_posts(
-        tx: &mut Transaction, // TODO: Move this into being managed by the struct somehow
+        &mut self,
         posts: impl Iterator<Item = Post>,
     ) -> Result<usize, rusqlite::Error> {
+        let tx = self.conn.transaction()?;
         let mut stmt = tx.prepare(
             "INSERT INTO posts(link, title, date, author) \
                             VALUES(:link, :title, :date, :author) \
@@ -52,6 +49,8 @@ impl Db {
                 (":author", &post.author),
             ])?;
         }
+        drop(stmt);
+        tx.commit()?;
         Ok(rows_affected)
     }
 

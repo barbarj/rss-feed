@@ -65,10 +65,9 @@ fn main() {
     }
     drop(tx); // main thread doesn't need a sender
 
-    let mut txn = db.transaction().unwrap();
-    let new_row_count =
-        Db::upsert_posts(&mut txn, rx.iter().flatten()).expect("Upserting posts failed");
-    txn.commit().unwrap();
+    let new_row_count = db
+        .upsert_posts(rx.iter().flatten())
+        .expect("Upserting posts failed");
     let all_posts = db.fetch_all_posts().expect("Fetching posts from db failed");
 
     output_list_to_html(&all_posts, &OUTPUT_HTML_PATH);
