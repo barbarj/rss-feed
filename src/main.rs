@@ -8,6 +8,11 @@ use std::{fs, sync::mpsc::channel, thread};
 
 // TODO: Figure out how to schedule for me
 
+// TODO: Add a --dry-run flag. This should make a copy of the database before
+// doing anything, and work with that copy for the duration of the run, deleting
+// at the end after generating the html. This'll be useful for testing new behavior
+// without concern for borking the db state.
+
 const APP_DIR: &'static str = "./app/";
 const DB_PATH: &'static str = constcat::concat!(APP_DIR, "db.sqlite");
 const OUTPUT_HTML_PATH: &'static str = constcat::concat!(APP_DIR, "feed.html");
