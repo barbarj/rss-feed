@@ -13,7 +13,7 @@ const DB_PATH: &'static str = constcat::concat!(APP_DIR, "db.sqlite");
 const OUTPUT_HTML_PATH: &'static str = constcat::concat!(APP_DIR, "feed.html");
 const CSS_LOC: &'static str = "./assets/style.css";
 
-static SITE_LIST: [Site; 4] = [
+static SITE_LIST: [Site; 5] = [
     Site {
         slug: "eatonphil",
         rss_link: "https://notes.eatonphil.com/rss.xml",
@@ -29,11 +29,11 @@ static SITE_LIST: [Site; 4] = [
         rss_link: "https://buttondown.email/hillelwayne/rss",
         author: "Hillel Wayne",
     },
-    // Site {
-    //     slug: "thorstenball",
-    //     rss_link: "https://thorstenball.com/atom.xml",
-    //     author: "Thorsten Ball",
-    // },
+    Site {
+        slug: "thorstenball",
+        rss_link: "https://thorstenball.com/atom.xml",
+        author: "Thorsten Ball",
+    },
     Site {
         slug: "registerspill",
         rss_link: "https://registerspill.thorstenball.com/feed",
