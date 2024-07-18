@@ -28,9 +28,10 @@ impl Tag {
             Tag::None => None,
         }
     }
-
-    fn from_name(name: &[u8]) -> Self {
-        match name {
+}
+impl From<&[u8]> for Tag {
+    fn from(value: &[u8]) -> Self {
+        match value {
             b"item" => Tag::Item,
             b"entry" => Tag::Entry,
             b"title" => Tag::Title,
@@ -43,11 +44,9 @@ impl Tag {
 }
 impl From<&BytesStart<'_>> for Tag {
     fn from(value: &BytesStart) -> Self {
-        Tag::from_name(value.name().as_ref())
+        Tag::from(value.name().as_ref())
     }
 }
-
-// TODO: Add atom parser
 
 enum DocStyle {
     RSS,
@@ -115,42 +114,24 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(())
     }
 
-    // TODO: Mimic code style of consume_next_tag_atom
-    /// Returns the next tag type and its contents. Assumes you are _in_ an `<item>`
-    fn consume_next_tag_rss(&mut self) -> Result<Option<(Tag, String)>, Error> {
+    /// Returns the next tag type and its contents. Assumes you are _in_ an `<item>` or `<entry`
+    fn consume_next_tag(&mut self) -> Result<Option<(Tag, String)>, Error> {
         let next_event = self.reader.read_event()?;
-        let start = match next_event {
-            Event::Start(t) => t,
-            Event::Eof => return Ok(None),
-            _ => {
-                eprintln!("failed on: {next_event:?}");
-                panic!("Should be impossible. XML is likely malformed.");
-            }
-        };
-        let end = start.to_end();
-        let tag = Tag::from_name(start.name().as_ref());
-
-        let text = self.reader.read_text(end.name())?;
-        let text = Parser::extract_text(&text);
-        Ok(Some((tag, text)))
-    }
-
-    fn consume_next_tag_atom(&mut self) -> Result<Option<(Tag, String)>, Error> {
-        let next_event = self.reader.read_event()?;
-        let (tag, text) = match next_event {
-            Event::Start(t) => {
+        let (tag, text) = match (&next_event, &self.style) {
+            (Event::Start(t), _) => {
                 let text = self.reader.read_text(t.to_end().name())?;
-                (Tag::from(&t), Parser::extract_text(&text))
+                (Tag::from(t), Parser::extract_text(&text))
             }
-            Event::Empty(t) => {
+            (Event::Empty(t), DocStyle::Atom) => {
+                assert_eq!(t.name().as_ref(), b"link"); // Only hanlding link tag currently
                 let text = t
                     .attributes()
                     .find(|res| res.as_ref().unwrap().key.as_ref() == b"href")
                     .expect("Finding href tag on link failed.")?
                     .unescape_value()?;
-                (Tag::from(&t), Parser::extract_text(&text))
+                (Tag::from(t), Parser::extract_text(&text))
             }
-            Event::Eof => return Ok(None),
+            (Event::Eof, _) => return Ok(None),
             _ => {
                 eprintln!("failed on: {next_event:?}");
                 panic!("Should be impossible. XML is likely malformed.");
@@ -186,11 +167,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut title: Option<String> = None;
         let mut date: Option<DateTime<Utc>> = None;
         while link.is_none() || title.is_none() || date.is_none() {
-            let tag_and_text = match self.style {
-                DocStyle::Atom => self.consume_next_tag_atom()?,
-                DocStyle::RSS => self.consume_next_tag_rss()?,
-            };
-            let (tag, text) = match tag_and_text {
+            let (tag, text) = match self.consume_next_tag()? {
                 Some((tag, text)) => (tag, text),
                 None => return Ok(None),
             };
