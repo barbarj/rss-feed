@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use quick_xml::{
-    events::{BytesEnd, BytesStart, Event},
+    events::{BytesStart, Event},
     Error, Reader,
 };
 
@@ -108,12 +108,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(None)
     }
 
-    /// Consumes through the next closing tag of of type `tag`
-    fn consume_close_tag(&mut self, end: BytesEnd) -> Result<(), Error> {
-        self.reader.read_to_end(end.name())?;
-        Ok(())
-    }
-
     /// Returns the next tag type and its contents. Assumes you are _in_ an `<item>` or `<entry`
     fn consume_next_tag(&mut self) -> Result<Option<(Tag, String)>, Error> {
         let next_event = self.reader.read_event()?;
@@ -171,18 +165,17 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Some((tag, text)) => (tag, text),
                 None => return Ok(None),
             };
-            // TODO: Extract handling this based on doc style
-            match tag {
-                Tag::Item | Tag::Entry => panic!("Shouldn't happen"), //TODO: remove panic via wrapped error
-                Tag::Link => link = Some(text),
-                Tag::Title => title = Some(text),
-                Tag::PubDate | Tag::Updated => {
+            match (tag, &self.style) {
+                (Tag::Link, _) => link = Some(text),
+                (Tag::Title, _) => title = Some(text),
+                (Tag::PubDate, DocStyle::RSS) | (Tag::Updated, DocStyle::Atom) => {
                     let d = DateTime::parse_from_rfc3339(&text)
                         .or(DateTime::parse_from_rfc2822(&text))
                         .expect("Date parsing failed");
                     date = Some(d.with_timezone(&Utc));
                 }
-                Tag::None => (),
+                (Tag::None, _) => (),
+                _ => panic!("Shouldn't happen"), //TODO: remove panic via wrapped error
             }
         }
         let link = link.take().expect("There should be an link here");
@@ -190,7 +183,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let date = date.take().expect("There should be an date here");
 
         // consume the closing tag
-        self.consume_close_tag(start.to_end())?;
+        self.reader.read_to_end(start.to_end().name())?;
 
         Ok(Some(Post {
             link,
