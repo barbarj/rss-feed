@@ -10,12 +10,13 @@ impl Db {
         let version = db.get_version().expect("Getting db version failed");
         match version {
             0 => db.migrate_v0_v1().expect("Migrating version 0 to 1 failed"),
-            1 => (),
+            1 => db.migrate_v1_v2().expect("Migrating v1 to v2 failed"),
+            2 => (),
             _ => panic!("Unknown db version found"),
         }
         let version = db.get_version().expect("Getting db version failed");
 
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
 
         Ok(db)
     }
@@ -103,6 +104,42 @@ impl Db {
 
         tx.execute("INSERT INTO _metadata(version) VALUES(1)", [])?;
         tx.commit()?;
+
+        Ok(())
+    }
+
+    fn migrate_v1_v2(&mut self) -> Result<(), rusqlite::Error> {
+        let tx = self.conn.transaction()?;
+        // dedup on title + date + author
+        let rows_to_be_deleted: Vec<(String, String)> = tx
+            .prepare(
+                "SELECT author, title FROM posts \
+                WHERE ROWID NOT IN ( \
+                    SELECT max(ROWID) \
+                    FROM posts \
+                    GROUP BY title, DATE(date), author \
+                ); ",
+            )?
+            .query([])?
+            .mapped(|r| Ok((r.get(0)?, r.get(1)?)))
+            .flatten()
+            .collect();
+        println!("ROWS TO BE REMOVED:");
+        for row in rows_to_be_deleted {
+            println!("{} - '{}'", row.0, row.1);
+        }
+
+        let rows_changed = tx.execute(
+            "DELETE FROM posts WHERE ROWID NOT IN ( \
+                SELECT max(ROWID) \
+                FROM posts \
+                GROUP BY title, DATE(date), author \
+            );",
+            [],
+        )?;
+        tx.execute("INSERT INTO _metadata(version) VALUES(2);", [])?;
+        tx.commit()?;
+        println!("Duplicate rows removed: {rows_changed}");
 
         Ok(())
     }

@@ -13,10 +13,11 @@ use std::{fs, sync::mpsc::channel, thread};
 // at the end after generating the html. This'll be useful for testing new behavior
 // without concern for borking the db state.
 
-const APP_DIR: &'static str = "./app/";
-const DB_PATH: &'static str = constcat::concat!(APP_DIR, "db.sqlite");
-const OUTPUT_HTML_PATH: &'static str = constcat::concat!(APP_DIR, "feed.html");
-const CSS_LOC: &'static str = "./assets/style.css";
+const APP_DIR: &str = "./app/";
+const DB_PATH: &str = constcat::concat!(APP_DIR, "db.sqlite");
+const DB_DRY_PATH: &str = constcat::concat!(APP_DIR, "dry_db.sqlite");
+const OUTPUT_HTML_PATH: &str = constcat::concat!(APP_DIR, "feed.html");
+const CSS_LOC: &str = "./assets/style.css";
 
 static SITE_LIST: [Site; 5] = [
     Site {
@@ -49,7 +50,7 @@ static SITE_LIST: [Site; 5] = [
 fn main() {
     let options = Options::new(env::args());
 
-    let mut db = initialize();
+    let mut db = initialize(options.dry_run);
 
     let (tx, rx) = channel();
     for site in SITE_LIST.as_ref() {
@@ -75,7 +76,7 @@ fn main() {
         .expect("Upserting posts failed");
     let all_posts = db.fetch_all_posts().expect("Fetching posts from db failed");
 
-    output_list_to_html(&all_posts, &OUTPUT_HTML_PATH);
+    output_list_to_html(&all_posts, OUTPUT_HTML_PATH);
     output_css(CSS_LOC, APP_DIR);
     println!("Added {new_row_count} posts from feeds.");
     println!("Output {} posts to html.", all_posts.len());
@@ -83,7 +84,7 @@ fn main() {
     if options.open_feed {
         // TODO: May only work on MacOS
         Command::new("open")
-            .arg(&OUTPUT_HTML_PATH)
+            .arg(OUTPUT_HTML_PATH)
             .spawn()
             .expect("Should have opened the html file in the browser");
     }
@@ -93,10 +94,15 @@ fn main() {
 ///
 /// # Panics
 /// - Panics if the directory creation fails
-fn initialize() -> Db {
+fn initialize(dry_run: bool) -> Db {
     fs::create_dir_all(APP_DIR).expect("Failed creating app directory");
 
-    let conn = Connection::open(DB_PATH).expect("Failed to establish database connection");
+    let conn = if dry_run {
+        fs::copy(DB_PATH, DB_DRY_PATH).expect("Copying db file for dry run failed");
+        Connection::open(DB_DRY_PATH).expect("Failed to establish database connection")
+    } else {
+        Connection::open(DB_PATH).expect("Failed to establish database connection")
+    };
 
     Db::build(conn).unwrap()
 }

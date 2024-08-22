@@ -11,15 +11,19 @@ pub mod storage;
 
 pub struct Options {
     pub open_feed: bool,
+    pub dry_run: bool,
 }
 impl Options {
     pub fn new(mut args: Args) -> Self {
         // skip program name
         args.next();
+        let args: Vec<String> = args.collect();
 
-        let open_feed = args.any(|a| a == "-o" || a == "--open");
+        let open_feed = args.iter().any(|a| a == "-o" || a == "--open");
+        let dry_run = args.iter().any(|a| a == "--dry-run");
+        // TODO: dry run flag
 
-        Options { open_feed }
+        Options { open_feed, dry_run }
     }
 }
 
