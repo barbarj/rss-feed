@@ -49,7 +49,7 @@ impl From<&BytesStart<'_>> for Tag {
 }
 
 enum DocStyle {
-    RSS,
+    Rss,
     Atom,
 }
 
@@ -61,7 +61,7 @@ pub struct Parser<'a, 'b> {
 }
 impl<'a, 'b> Parser<'a, 'b> {
     pub fn new(input: &'a str, author: &'b str) -> Self {
-        let mut reader = Reader::from_str(&input);
+        let mut reader = Reader::from_str(input);
         reader.config_mut().trim_text(true);
 
         let _first_event = reader.read_event().expect("Reading first event failed.");
@@ -77,7 +77,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             .expect("Reading first tag event failed.");
         let style = match first_tag_event {
             Event::Start(t) => match t.name().as_ref() {
-                b"rss" => DocStyle::RSS,
+                b"rss" => DocStyle::Rss,
                 b"feed" => DocStyle::Atom,
                 _ => panic!("Invalid first tag name"),
             },
@@ -86,7 +86,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         Parser {
             reader,
-            author: &author,
+            author,
             style,
             done: false,
         }
@@ -149,7 +149,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         // find item opening tag
         let opening_tag_type = match self.style {
             DocStyle::Atom => Tag::Entry,
-            DocStyle::RSS => Tag::Item,
+            DocStyle::Rss => Tag::Item,
         };
         let start = match self.read_through_start(opening_tag_type)? {
             Some(s) => s.to_owned(),
@@ -168,7 +168,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             match (tag, &self.style) {
                 (Tag::Link, _) => link = Some(text),
                 (Tag::Title, _) => title = Some(text),
-                (Tag::PubDate, DocStyle::RSS) | (Tag::Updated, DocStyle::Atom) => {
+                (Tag::PubDate, DocStyle::Rss) | (Tag::Updated, DocStyle::Atom) => {
                     let d = DateTime::parse_from_rfc3339(&text)
                         .or(DateTime::parse_from_rfc2822(&text))
                         .expect("Date parsing failed");
@@ -194,7 +194,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn extract_text(text: &str) -> String {
-        const CDATA_START: &'static str = "<![CDATA[";
+        const CDATA_START: &str = "<![CDATA[";
         // remove cdata wrapper if necessary
         if text.starts_with(CDATA_START) {
             text.trim_start_matches(CDATA_START)

@@ -47,7 +47,7 @@ pub struct Post {
 }
 impl Post {
     pub fn parse_stored_date(text: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
-        let dt = DateTime::parse_from_rfc3339(&text)?;
+        let dt = DateTime::parse_from_rfc3339(text)?;
         Ok(dt.with_timezone(&Utc))
     }
 }
