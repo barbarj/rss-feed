@@ -1,8 +1,10 @@
+use rjsdb::repl::Repl;
+use rjsdb::Database;
 use rss_feed::storage::Db;
 use rss_feed::{output_css, output_list_to_html, Site};
 use rss_feed::{parse, Options};
-use rusqlite::Connection;
 use std::env;
+use std::path::Path;
 use std::process::Command;
 use std::{fs, sync::mpsc::channel, thread};
 
@@ -51,6 +53,10 @@ fn main() {
     let options = Options::new(env::args());
 
     let mut db = initialize(options.dry_run);
+    if options.repl {
+        Repl::new().run(&mut db.conn).unwrap();
+        return;
+    }
 
     let (tx, rx) = channel();
     for site in SITE_LIST.as_ref() {
@@ -99,9 +105,9 @@ fn initialize(dry_run: bool) -> Db {
 
     let conn = if dry_run {
         fs::copy(DB_PATH, DB_DRY_PATH).expect("Copying db file for dry run failed");
-        Connection::open(DB_DRY_PATH).expect("Failed to establish database connection")
+        Database::init(Path::new(DB_DRY_PATH)).expect("Failed to establish database connection")
     } else {
-        Connection::open(DB_PATH).expect("Failed to establish database connection")
+        Database::init(Path::new(DB_PATH)).expect("Failed to establish database connection")
     };
 
     Db::build(conn).unwrap()

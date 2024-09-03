@@ -1,16 +1,16 @@
 use crate::Post;
-use rjsdb::{DatabaseError, Database as Connection}
+use rjsdb::{storage::Row, DataAccess, Database as Connection, DatabaseError};
 
 type Result<T> = std::result::Result<T, DatabaseError>;
 
 pub struct Db {
-    conn: Connection,
+    pub conn: Connection,
 }
 impl Db {
     pub fn build(conn: Connection) -> Result<Self> {
         let mut db = Db { conn };
         // TODO: Fix so that we're operating on a fresh db
-        let version = db.get_version().unwrap_or(0);
+        let version = db.get_version().expect("fetching initial version failed");
         match version {
             0 => db.migrate_v0_v1().expect("Migrating version 0 to 1 failed"),
             1 => (),
@@ -23,40 +23,40 @@ impl Db {
         Ok(db)
     }
 
-    pub fn upsert_posts(
-        &mut self,
-        posts: impl Iterator<Item = Post>,
-    ) -> Result<usize> {
+    pub fn upsert_posts(&mut self, posts: impl Iterator<Item = Post>) -> Result<usize> {
         let mut tx = self.conn.transaction()?;
         let mut stmt = tx.prepare(
             "INSERT INTO posts(link, title, date, author) \
                             VALUES(:link, :title, :date, :author) \
                             ON CONFLICT(link) DO NOTHING;",
-        )?;
+        );
 
         let mut rows_affected = 0;
 
         for post in posts {
-            rows_affected += stmt.execute([
-                (":link", &post.link),
-                (":title", &post.title),
-                (":date", &post.date.to_rfc3339()),
-                (":author", &post.author),
-            ].as_slice())?;
+            rows_affected += stmt.execute(
+                [
+                    (":link", &post.link),
+                    (":title", &post.title),
+                    (":date", &post.date.to_rfc3339()),
+                    (":author", &post.author),
+                ]
+                .as_slice(),
+            )?;
         }
         drop(stmt);
         tx.commit()?;
         Ok(rows_affected)
     }
 
-    pub fn fetch_all_posts(&self) -> Result<Vec<Post>> {
+    pub fn fetch_all_posts(&mut self) -> Result<Vec<Post>> {
         let mut stmt = self
             .conn
             .prepare("SELECT link, title, date, author FROM posts ORDER BY date DESC;")?;
 
         let posts = stmt
-            .query([])?
-            .mapped(|row| {
+            .query()?
+            .mapped(|row: &Row| {
                 let d: String = row.get(2)?;
                 let date = Post::parse_stored_date(&d).expect("Parsing stored date failed");
                 let item = Post {
@@ -73,18 +73,18 @@ impl Db {
     }
 
     // MIGRATIONS
-    fn get_version(&self) -> Result<usize> {
+    fn get_version(&mut self) -> Result<usize> {
         self.conn
-            .execute("CREATE TABLE IF NOT EXISTS _metadata(version INTEGER);")?; 
+            .execute("CREATE TABLE IF NOT EXISTS _metadata(version UNSIGNED INT);")?;
 
         let version: Option<usize> = self
             .conn
             .prepare("SELECT version FROM _metadata ORDER BY version DESC LIMIT 1;")?
-            .query([])?
-            .mapped([], |row| {
-                let version: usize = row.get(0)?;
+            .query()?
+            .mapped(|row: &Row| {
+                let version: usize = row.get(0).unwrap();
                 Ok(version)
-            })?
+            })
             .flatten()
             .next();
 
@@ -96,15 +96,15 @@ impl Db {
         // create table
         let rows_changed = tx.execute(
             "CREATE TABLE IF NOT EXISTS posts( \
-                link TEXT PRIMARY KEY, \
-                title TEXT, \
-                date TEXT, \
-                author TEXT \
+                link STRING PRIMARY KEY, \
+                title STRING, \
+                date STRING, \
+                author STRING \
             );",
         )?;
         assert_eq!(rows_changed, 0);
 
-        tx.execute("INSERT INTO _metadata(version) VALUES(1)")?;
+        tx.execute("INSERT INTO _metadata(version) VALUES(1);")?;
         tx.commit()?;
 
         Ok(())
