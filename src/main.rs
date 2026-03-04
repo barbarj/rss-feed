@@ -11,6 +11,11 @@ use std::{fs, sync::mpsc::channel, thread};
 // TODO: Figure out how to schedule for me
 
 // TODO: Make a more useful app. Allow things like:
+//      - Switch to either table or flexbox-based styling
+//      - Add a method to export all data
+//      - Store sites in db
+//          - this will require joins
+//      - Add a way to interactively add a site
 //      - Browse by author
 //      - sort by other fields
 //      - mark (and filter by) as read
@@ -21,7 +26,7 @@ const DB_DRY_PATH: &str = constcat::concat!(APP_DIR, "dry_db.rjsdb");
 const OUTPUT_HTML_PATH: &str = constcat::concat!(APP_DIR, "feed.html");
 const CSS_LOC: &str = "./assets/style.css";
 
-static SITE_LIST: [Site; 5] = [
+static SITE_LIST: [Site; 6] = [
     Site {
         slug: "eatonphil",
         rss_link: "https://notes.eatonphil.com/rss.xml",
@@ -46,6 +51,11 @@ static SITE_LIST: [Site; 5] = [
         slug: "registerspill",
         rss_link: "https://registerspill.thorstenball.com/feed",
         author: "Thorsten Ball",
+    },
+    Site {
+        slug: "matklad",
+        rss_link: "https://matklad.github.io/feed.xml",
+        author: "matklad (Alex Kladov)",
     },
 ];
 
