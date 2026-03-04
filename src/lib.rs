@@ -12,7 +12,6 @@ pub mod storage;
 pub struct Options {
     pub open_feed: bool,
     pub dry_run: bool,
-    pub repl: bool,
 }
 impl Options {
     pub fn new(mut args: Args) -> Self {
@@ -22,14 +21,8 @@ impl Options {
 
         let open_feed = args.iter().any(|a| a == "-o" || a == "--open");
         let dry_run = args.iter().any(|a| a == "--dry-run");
-        let repl = args.iter().any(|a| a == "--repl");
-        // TODO: dry run flag
 
-        Options {
-            open_feed,
-            dry_run,
-            repl,
-        }
+        Options { open_feed, dry_run }
     }
 }
 

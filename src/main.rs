@@ -1,12 +1,10 @@
-use rjsdb::repl::Repl;
-use rjsdb::Database;
 use rss_feed::storage::Db;
 use rss_feed::{output_css, output_list_to_html, Site};
 use rss_feed::{parse, Options};
 use std::env;
-use std::path::Path;
 use std::process::Command;
 use std::{fs, sync::mpsc::channel, thread};
+use turso::Builder;
 
 // TODO: Figure out how to schedule for me
 
@@ -21,8 +19,8 @@ use std::{fs, sync::mpsc::channel, thread};
 //      - mark (and filter by) as read
 
 const APP_DIR: &str = "./app/";
-const DB_PATH: &str = constcat::concat!(APP_DIR, "db.rjsdb");
-const DB_DRY_PATH: &str = constcat::concat!(APP_DIR, "dry_db.rjsdb");
+const DB_PATH: &str = constcat::concat!(APP_DIR, "rss.db");
+const DB_DRY_PATH: &str = constcat::concat!(APP_DIR, "dry_rss.db");
 const OUTPUT_HTML_PATH: &str = constcat::concat!(APP_DIR, "feed.html");
 const CSS_LOC: &str = "./assets/style.css";
 
@@ -59,15 +57,11 @@ static SITE_LIST: [Site; 6] = [
     },
 ];
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let options = Options::new(env::args());
 
-    let mut db = initialize(options.dry_run);
-    if options.repl {
-        Repl::new().run(&mut db.conn).unwrap();
-        return;
-    }
-
+    let mut db = initialize(options.dry_run).await;
     let (tx, rx) = channel();
     for site in SITE_LIST.as_ref() {
         let thread_tx = tx.clone();
@@ -89,8 +83,12 @@ fn main() {
 
     let new_row_count = db
         .upsert_posts(rx.iter().flatten())
+        .await
         .expect("Upserting posts failed");
-    let all_posts = db.fetch_all_posts().expect("Fetching posts from db failed");
+    let all_posts = db
+        .fetch_all_posts()
+        .await
+        .expect("Fetching posts from db failed");
 
     output_list_to_html(&all_posts, OUTPUT_HTML_PATH);
     output_css(CSS_LOC, APP_DIR);
@@ -102,7 +100,9 @@ fn main() {
         Command::new("open")
             .arg(OUTPUT_HTML_PATH)
             .spawn()
-            .expect("Should have opened the html file in the browser");
+            .expect("Should have opened the html file in the browser")
+            .wait()
+            .unwrap();
     }
 }
 
@@ -110,15 +110,23 @@ fn main() {
 ///
 /// # Panics
 /// - Panics if the directory creation fails
-fn initialize(dry_run: bool) -> Db {
+async fn initialize(dry_run: bool) -> Db {
     fs::create_dir_all(APP_DIR).expect("Failed creating app directory");
 
-    let conn = if dry_run {
+    let db_path = if dry_run {
         fs::copy(DB_PATH, DB_DRY_PATH).expect("Copying db file for dry run failed");
-        Database::init(Path::new(DB_DRY_PATH)).expect("Failed to establish database connection")
+        DB_DRY_PATH
     } else {
-        Database::init(Path::new(DB_PATH)).expect("Failed to establish database connection")
+        DB_PATH
     };
 
-    Db::build(conn).unwrap()
+    let db = Builder::new_local(db_path)
+        .build()
+        .await
+        .expect("Failed to initialize database");
+    let conn = db
+        .connect()
+        .expect("Failed to establish database connection");
+
+    Db::build(conn).await.unwrap()
 }
