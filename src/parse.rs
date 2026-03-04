@@ -92,7 +92,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn read_through_start(&mut self, tag: Tag) -> Result<Option<BytesStart>, Error> {
+    fn read_through_start(&mut self, tag: Tag) -> Result<Option<BytesStart<'_>>, Error> {
         assert!(!matches!(tag, Tag::None));
 
         while let Ok(event) = self.reader.read_event() {
