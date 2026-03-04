@@ -5,3 +5,8 @@ slug,rss_link,author
 "thorstenball","https://thorstenball.com/atom.xml","Thorsten Ball"
 "registerspill","https://registerspill.thorstenball.com/feed","Thorsten Ball"
 "matklad","https://matklad.github.io/feed.xml","matklad (Alex Kladov)"
+"hashimoto","https://mitchellh.com/writing","Mitchell Hashimoto"
+"lethain","https://lethain.com/","Will Larson"
+"paradedb","https://www.paradedb.com/feed.xml","Parade DB"
+"dgtlgrove","https://www.dgtlgrove.com/feed.xml","Ryan Fleury"
+"transactionblog","https://transactional.blog/feed.xml","Alex Miller"
