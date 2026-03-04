@@ -1706,6 +1706,7 @@ dependencies = [
  "csv",
  "quick-xml",
  "reqwest",
+ "serde",
  "tokio",
  "turso",
 ]

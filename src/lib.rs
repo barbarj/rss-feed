@@ -4,7 +4,9 @@ use std::fs::{self, File};
 use std::io::Write;
 
 use chrono::{DateTime, Utc};
+use csv::{Reader, Result as CSVResult};
 use reqwest::Error as ReqwestError;
+use serde::Deserialize;
 
 pub mod parse;
 pub mod storage;
@@ -26,15 +28,16 @@ impl Options {
     }
 }
 
-pub struct Site<'a> {
-    pub slug: &'a str,
-    pub rss_link: &'a str,
-    pub author: &'a str,
+#[derive(Deserialize)]
+pub struct Site {
+    pub slug: String,
+    pub rss_link: String,
+    pub author: String,
 }
-impl Site<'_> {
+impl Site {
     pub fn get_rss_text(&self) -> Result<String, ReqwestError> {
         // TODO: Make retry on certain kinds of failures
-        reqwest::blocking::get(self.rss_link)?.text()
+        reqwest::blocking::get(&self.rss_link)?.text()
     }
 }
 
@@ -88,4 +91,9 @@ pub fn output_list_to_html(list: &Vec<Post>, filepath: &str) {
 
 pub fn output_css(css_path: &str, app_dir: &str) {
     fs::copy(css_path, app_dir.to_string() + "style.css").expect("Copying CSS file failed.");
+}
+
+pub fn load_sources(sources_file: &str) -> CSVResult<Vec<Site>> {
+    let mut reader = Reader::from_path(sources_file)?;
+    reader.deserialize().collect()
 }

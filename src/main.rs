@@ -1,5 +1,5 @@
 use rss_feed::storage::Db;
-use rss_feed::{output_css, output_list_to_html, Site};
+use rss_feed::{load_sources, output_css, output_list_to_html};
 use rss_feed::{parse, Options};
 use std::env;
 use std::process::Command;
@@ -23,39 +23,7 @@ const DB_PATH: &str = constcat::concat!(APP_DIR, "rss.db");
 const DB_DRY_PATH: &str = constcat::concat!(APP_DIR, "dry_rss.db");
 const OUTPUT_HTML_PATH: &str = constcat::concat!(APP_DIR, "feed.html");
 const CSS_LOC: &str = "./assets/style.css";
-
-static SITE_LIST: [Site; 6] = [
-    Site {
-        slug: "eatonphil",
-        rss_link: "https://notes.eatonphil.com/rss.xml",
-        author: "Phil Eaton",
-    },
-    Site {
-        slug: "danluu",
-        rss_link: "https://danluu.com/atom.xml",
-        author: "Dan Luu",
-    },
-    Site {
-        slug: "hillelwayne",
-        rss_link: "https://buttondown.email/hillelwayne/rss",
-        author: "Hillel Wayne",
-    },
-    Site {
-        slug: "thorstenball",
-        rss_link: "https://thorstenball.com/atom.xml",
-        author: "Thorsten Ball",
-    },
-    Site {
-        slug: "registerspill",
-        rss_link: "https://registerspill.thorstenball.com/feed",
-        author: "Thorsten Ball",
-    },
-    Site {
-        slug: "matklad",
-        rss_link: "https://matklad.github.io/feed.xml",
-        author: "matklad (Alex Kladov)",
-    },
-];
+const SOURCES_FILE: &str = "./sources.csv";
 
 #[tokio::main]
 async fn main() {
@@ -63,7 +31,8 @@ async fn main() {
 
     let mut db = initialize(options.dry_run).await;
     let (tx, rx) = channel();
-    for site in SITE_LIST.as_ref() {
+    let sources = load_sources(SOURCES_FILE).expect("Failed to load sources");
+    for site in sources {
         let thread_tx = tx.clone();
 
         // fetches posts for this site. Completion is guaranteed by blocking on the
@@ -73,7 +42,7 @@ async fn main() {
             let text = site.get_rss_text().unwrap();
             println!("Fetched rss file for {}, size: {}", site.slug, text.len());
 
-            let parser = parse::Parser::new(&text, site.author);
+            let parser = parse::Parser::new(&text, &site.author);
             for item in parser.into_iter() {
                 thread_tx.send(item).unwrap();
             }
