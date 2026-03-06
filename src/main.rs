@@ -93,6 +93,7 @@ async fn load_feeds_parallel(db: &mut Db, sources: Vec<Site>) -> u64 {
     for site in sources {
         let thread_tx = tx.clone();
 
+        println!("Fetching rss file for {}", site.slug);
         // fetches posts for this site. Completion is guaranteed by blocking on the
         // channel receiver later
         thread::spawn(async move || {
