@@ -3,7 +3,8 @@ use rss_feed::{load_sources, output_css, output_list_to_html, Post, Site};
 use rss_feed::{parse, Options};
 use std::env;
 use std::process::Command;
-use std::{fs, sync::mpsc::channel, thread};
+use std::{fs, sync::mpsc::channel};
+use tokio::task::yield_now;
 use turso::Builder;
 
 // TODO: Figure out how to schedule for me
@@ -90,13 +91,14 @@ async fn load_feeds_serial(db: &mut Db, sources: Vec<Site>) -> u64 {
 
 async fn load_feeds_parallel(db: &mut Db, sources: Vec<Site>) -> u64 {
     let (tx, rx) = channel();
+    let mut handles = Vec::with_capacity(sources.len());
     for site in sources {
         let thread_tx = tx.clone();
 
         println!("Fetching rss file for {}", site.slug);
         // fetches posts for this site. Completion is guaranteed by blocking on the
         // channel receiver later
-        thread::spawn(async move || {
+        let handle = tokio::spawn(async move {
             // TODO: Make fail gracefully if something goes wrong. Don't kill everything
             let text = site.get_rss_text().await.unwrap();
             println!("Fetched rss file for {}, size: {}", site.slug, text.len());
@@ -105,7 +107,9 @@ async fn load_feeds_parallel(db: &mut Db, sources: Vec<Site>) -> u64 {
             for item in parser.into_iter() {
                 thread_tx.send(item).unwrap();
             }
+            yield_now().await
         });
+        handles.push(handle);
     }
     drop(tx); // main thread doesn't need a sender
 
@@ -113,6 +117,9 @@ async fn load_feeds_parallel(db: &mut Db, sources: Vec<Site>) -> u64 {
         .upsert_posts(rx.iter().flatten())
         .await
         .expect("Upserting posts failed");
+    for h in handles {
+        h.await.unwrap();
+    }
     new_row_count
 }
 
