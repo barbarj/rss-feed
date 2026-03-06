@@ -18,6 +18,7 @@ pub struct Options {
     pub sources_file: Option<String>,
     pub output_html_directory: Option<String>,
     pub output_html_filename: Option<String>,
+    pub html_asset_path: Option<String>,
 }
 impl Options {
     pub fn new(mut args: Args) -> Self {
@@ -31,6 +32,7 @@ impl Options {
         let sources_file = flag_arg_from_args(&args, "sources_file");
         let output_html_directory = flag_arg_from_args(&args, "output_html_directory");
         let output_html_filename = flag_arg_from_args(&args, "output_html_filename");
+        let html_asset_path = flag_arg_from_args(&args, "html_asset_path");
 
         Options {
             serial,
@@ -39,6 +41,7 @@ impl Options {
             sources_file,
             output_html_directory,
             output_html_filename,
+            html_asset_path,
         }
     }
 }
@@ -86,14 +89,14 @@ impl Display for Post {
     }
 }
 
-pub fn output_list_to_html(list: &Vec<Post>, filepath: &str) {
+pub fn output_list_to_html(list: &Vec<Post>, filepath: &str, asset_path: &str) {
     let mut file = File::create(filepath)
         .unwrap_or_else(|_| panic!("Failed to create html file for '{filepath}'"));
-    file.write_all(
-        "<html lang=\"en\"><head><link rel=\"stylesheet\" href=\"./style.css\"></head><body>"
-            .as_bytes(),
-    )
-    .unwrap();
+    let beginning = format!(
+        "<html lang=\"en\"><head><link rel=\"stylesheet\" href=\"{}/style.css\"></head><body>",
+        asset_path
+    );
+    file.write_all(beginning.as_bytes()).unwrap();
     for item in list {
         file.write_fmt(format_args!(
             " \

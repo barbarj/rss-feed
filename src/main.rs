@@ -24,7 +24,6 @@ const DB_PATH: &str = constcat::concat!(APP_DIR, "rss.db");
 const DB_DRY_PATH: &str = constcat::concat!(APP_DIR, "dry_rss.db");
 const CSS_LOC: &str = "./assets/style.css";
 const SOURCES_FILE_DEFAULT: &str = "./sources.csv";
-//const OUTPUT_HTML_PATH: &str = constcat::concat!(APP_DIR, "feed.html");
 
 #[tokio::main]
 async fn main() {
@@ -56,7 +55,8 @@ async fn main() {
         .as_deref()
         .unwrap_or("feed.html");
     let output_html = output_dir.to_string() + "/" + html_filename;
-    output_list_to_html(&all_posts, &output_html);
+    let html_asset_path = options.html_asset_path.as_deref().unwrap_or(".");
+    output_list_to_html(&all_posts, &output_html, html_asset_path);
     output_css(CSS_LOC, output_dir);
     println!("Added {new_row_count} posts from feeds.");
     println!("Output {} posts to html.", all_posts.len());
