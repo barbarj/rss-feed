@@ -15,6 +15,7 @@ pub struct Options {
     pub serial: bool,
     pub open_feed: bool,
     pub dry_run: bool,
+    pub sources_file: Option<String>,
     pub output_html_directory: Option<String>,
     pub output_html_filename: Option<String>,
 }
@@ -27,6 +28,7 @@ impl Options {
         let serial = args.iter().any(|a| a == "--serial");
         let open_feed = args.iter().any(|a| a == "-o" || a == "--open");
         let dry_run = args.iter().any(|a| a == "--dry-run");
+        let sources_file = flag_arg_from_args(&args, "sources_file");
         let output_html_directory = flag_arg_from_args(&args, "output_html_directory");
         let output_html_filename = flag_arg_from_args(&args, "output_html_filename");
 
@@ -34,6 +36,7 @@ impl Options {
             serial,
             open_feed,
             dry_run,
+            sources_file,
             output_html_directory,
             output_html_filename,
         }

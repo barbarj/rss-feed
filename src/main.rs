@@ -23,7 +23,7 @@ const APP_DIR: &str = "./app/";
 const DB_PATH: &str = constcat::concat!(APP_DIR, "rss.db");
 const DB_DRY_PATH: &str = constcat::concat!(APP_DIR, "dry_rss.db");
 const CSS_LOC: &str = "./assets/style.css";
-const SOURCES_FILE: &str = "./sources.csv";
+const SOURCES_FILE_DEFAULT: &str = "./sources.csv";
 //const OUTPUT_HTML_PATH: &str = constcat::concat!(APP_DIR, "feed.html");
 
 #[tokio::main]
@@ -31,7 +31,12 @@ async fn main() {
     let options = Options::new(env::args());
 
     let mut db = initialize(options.dry_run).await;
-    let sources = load_sources(SOURCES_FILE).expect("Failed to load sources");
+    let sources_file = options
+        .sources_file
+        .as_deref()
+        .unwrap_or(SOURCES_FILE_DEFAULT);
+    let sources = load_sources(sources_file)
+        .unwrap_or_else(|_| panic!("Failed to load sources from file: {sources_file}"));
     println!("Read {} entries in sources file", sources.len());
 
     let new_row_count = if options.serial {
