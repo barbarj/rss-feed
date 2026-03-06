@@ -43,7 +43,11 @@ async fn main() {
         .expect("Fetching posts from db failed");
 
     let output_dir = options.output_html_directory.as_deref().unwrap_or(APP_DIR);
-    let output_html = output_dir.to_string() + "/feed.html";
+    let html_filename = options
+        .output_html_filename
+        .as_deref()
+        .unwrap_or("feed.html");
+    let output_html = output_dir.to_string() + "/" + html_filename;
     output_list_to_html(&all_posts, &output_html);
     output_css(CSS_LOC, output_dir);
     println!("Added {new_row_count} posts from feeds.");

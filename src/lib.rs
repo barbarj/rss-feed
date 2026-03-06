@@ -16,6 +16,7 @@ pub struct Options {
     pub open_feed: bool,
     pub dry_run: bool,
     pub output_html_directory: Option<String>,
+    pub output_html_filename: Option<String>,
 }
 impl Options {
     pub fn new(mut args: Args) -> Self {
@@ -27,12 +28,14 @@ impl Options {
         let open_feed = args.iter().any(|a| a == "-o" || a == "--open");
         let dry_run = args.iter().any(|a| a == "--dry-run");
         let output_html_directory = flag_arg_from_args(&args, "output_html_directory");
+        let output_html_filename = flag_arg_from_args(&args, "output_html_filename");
 
         Options {
             serial,
             open_feed,
             dry_run,
             output_html_directory,
+            output_html_filename,
         }
     }
 }
@@ -81,8 +84,8 @@ impl Display for Post {
 }
 
 pub fn output_list_to_html(list: &Vec<Post>, filepath: &str) {
-    let mut file =
-        File::create(filepath).expect(&format!("Failed to create html file for '{filepath}'"));
+    let mut file = File::create(filepath)
+        .unwrap_or_else(|_| panic!("Failed to create html file for '{filepath}'"));
     file.write_all(
         "<html lang=\"en\"><head><link rel=\"stylesheet\" href=\"./style.css\"></head><body>"
             .as_bytes(),
