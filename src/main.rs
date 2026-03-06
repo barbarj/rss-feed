@@ -43,6 +43,7 @@ async fn main() {
         .expect("Fetching posts from db failed");
 
     let output_dir = options.output_html_directory.as_deref().unwrap_or(APP_DIR);
+    fs::create_dir_all(output_dir).unwrap();
     let html_filename = options
         .output_html_filename
         .as_deref()
