@@ -32,6 +32,8 @@ async fn main() {
 
     let mut db = initialize(options.dry_run).await;
     let sources = load_sources(SOURCES_FILE).expect("Failed to load sources");
+    println!("Read {} entries in sources file", sources.len());
+
     let new_row_count = if options.serial {
         load_feeds_serial(&mut db, sources).await
     } else {
