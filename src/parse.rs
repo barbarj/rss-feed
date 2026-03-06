@@ -12,6 +12,7 @@ enum Tag {
     Entry,
     Title,
     Link,
+    Category,
     PubDate,
     Updated,
     None,
@@ -23,6 +24,7 @@ impl Tag {
             Tag::Entry => Some(b"entry"),
             Tag::Title => Some(b"title"),
             Tag::Link => Some(b"link"),
+            Tag::Category => Some(b"category"),
             Tag::PubDate => Some(b"pubDate"),
             Tag::Updated => Some(b"updated"),
             Tag::None => None,
@@ -36,6 +38,7 @@ impl From<&[u8]> for Tag {
             b"entry" => Tag::Entry,
             b"title" => Tag::Title,
             b"link" => Tag::Link,
+            b"category" => Tag::Category,
             b"pubDate" => Tag::PubDate,
             b"updated" => Tag::Updated,
             _ => Tag::None,
@@ -81,7 +84,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 b"feed" => DocStyle::Atom,
                 _ => panic!("Invalid first tag name"),
             },
-            _ => panic!("Invalid first event type."),
+            _ => panic!("Invalid first event type. {:?}", first_tag_event),
         };
 
         Parser {
@@ -108,7 +111,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(None)
     }
 
-    /// Returns the next tag type and its contents. Assumes you are _in_ an `<item>` or `<entry`
+    /// Returns the next tag type and its contents. Assumes you are _in_ an `<item>` or `<entry>`
     fn consume_next_tag(&mut self) -> Result<Option<(Tag, String)>, Error> {
         let next_event = self.reader.read_event()?;
         let (tag, text) = match (&next_event, &self.style) {
@@ -116,8 +119,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let text = self.reader.read_text(t.to_end().name())?;
                 (Tag::from(t), Parser::extract_text(&text))
             }
-            (Event::Empty(t), DocStyle::Atom) => {
-                assert_eq!(t.name().as_ref(), b"link"); // Only hanlding link tag currently
+            (Event::Empty(t), DocStyle::Atom) if t.name().as_ref() == b"link" => {
                 let text = t
                     .attributes()
                     .find(|res| res.as_ref().unwrap().key.as_ref() == b"href")
@@ -125,10 +127,18 @@ impl<'a, 'b> Parser<'a, 'b> {
                     .unescape_value()?;
                 (Tag::from(t), Parser::extract_text(&text))
             }
+            (Event::Empty(t), DocStyle::Atom) if t.name().as_ref() == b"category" => {
+                let text = t
+                    .attributes()
+                    .find(|res| res.as_ref().unwrap().key.as_ref() == b"term")
+                    .expect("Finding term attr on category failed.")?
+                    .unescape_value()?;
+                (Tag::from(t), Parser::extract_text(&text))
+            }
             (Event::Eof, _) => return Ok(None),
             _ => {
                 eprintln!("failed on: {next_event:?}");
-                panic!("Should be impossible. XML is likely malformed.");
+                panic!("Should be impossible. XML is likely malformed or this is a tag we don't recognize");
             }
         };
 
@@ -174,7 +184,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         .expect("Date parsing failed");
                     date = Some(d.with_timezone(&Utc));
                 }
-                (Tag::None, _) => (),
+                (Tag::None, _) | (Tag::Category, _) => (),
                 _ => panic!("Shouldn't happen"), //TODO: remove panic via wrapped error
             }
         }
